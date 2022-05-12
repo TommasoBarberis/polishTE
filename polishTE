@@ -4,8 +4,6 @@
 # Date: 27/04/2022
 # Description: extension of consensi of transposable elements
 # TODOs:
-#   - verify integrity for low coverage sequence (TAG: low_0000)
-#   - upgrade the cleaning of repo
 #   - singularity container
 
 # dependancies:
@@ -35,14 +33,14 @@ function usage()
 
    #######################################
 
-   Extender is a tool to refine and extend transposable elements. It inputs a TE consenus
+   polishTE is a tool to refine and extend transposable elements. It inputs a TE consenus
    sequence and a reference genome at the fasta format.
 
    Full Documentation: link repo github
                                       
    #######################################
 
-   Usage: extender [-i|--input <seq_TE.fasta>] [-g|--genome <genome.fasta>] [options]
+   Usage: polishTE [-i|--input <seq_TE.fasta>] [-g|--genome <genome.fasta>] [options]
 
    mendatory arguments:
     
