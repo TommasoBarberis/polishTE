@@ -4,9 +4,6 @@
 # Date: 27/04/2022
 # Description: extension of consensi of transposable elements
 # TODOs:
-#   - option to plot alignement from CIAlign
-#   - test for installed dependancies
-#   - add user parameter min coverage
 #   - verify integrity for low coverage sequence (TAG: low_0000)
 #   - upgrade the cleaning of repo
 #   - singularity container
@@ -221,6 +218,7 @@ while [[ $# -gt 0 ]]; do
 	esac
 done
 
+
 #####################################################
 
 # check for mandatory arguments
@@ -239,6 +237,35 @@ OUTPUTDIR=$(realpath $OUTPUTDIR 2> /dev/null) || {
     echo "  ERROR! Invalid output directory.";
     exit 1;
 }
+
+
+#####################################################
+
+## dependencies check
+dependencies=(mafft blastn samtools awk bedtools CIAlign python3 R)
+for dep in ${dependencies[@]}; do
+	if command -v $dep > /dev/null 2>&1; then
+		true
+	else
+		echo -e "$dep not found!"
+		quit=true
+	fi
+done
+
+python_dependencies=(Levenshtein)
+for py_dep in ${python_dependencies[@]}; do
+	if python3 -c "import $py_dep" > /dev/null 2>&1; then
+		true
+	else
+		echo -e "$py_dep not found!"
+		quit=true
+	fi
+done
+
+if $quit; then
+    exit 1
+fi
+
 
 #####################################################
 
