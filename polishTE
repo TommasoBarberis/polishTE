@@ -24,6 +24,7 @@
 # for more information:
 # https://github.com/TommasoBarberis/polishTE
 
+
 function usage()
 {
    cat << DOC
@@ -311,12 +312,15 @@ function get_blast_hit() {
     echo -e "the hit locus will be extended:\t $6bp in 5' and $7bp in 3'"
     echo -e "\n\n"
 
-    # run blast
+    # run blastn
     echo "#qseqid sseqid pident length mismatch qstart qend sstart send sstrand" > $1.blast.o
     blastn -query $2 -db $3 -outfmt "6 qseqid sseqid pident length mismatch qstart qend sstart send sstrand" -evalue $4 | awk -v "ml=$5" '{OFS="\t"; if ($4 > ml) {print $0}}' >> $1.blast.o
     
+    # filter blastn results
+    awk -v cons_len="$8" '{OFS="\t"; if ($1~/^#/) {} else {if ($3 > 80 && $7-$6 > 30 && $7-$6<3*cons_len) {print}}}' < $1.blast.o > $1.blast.tmp.o
+
     # parse blast result into a bed file
-    awk '{OFS="\t"; if ($1~/^#/) {} else { if ($10~/plus/) {print $2, $8, $9, $1, $3, "+"} else {print $2, $9, $8, $1, $3, "-"}}}' < $1.blast.o > $1.blast.bed
+    awk '{OFS="\t"; if ($10~/plus/) {print $2, $8, $9, $1, $3, "+"} else {print $2, $9, $8, $1, $3, "-"}}' < $1.blast.tmp.o > $1.blast.bed
 
     # extend boundaries "flank" bases up and down of the blast hit locations
     bedtools slop -s  -i $1.blast.bed  -g $3.length -l $6 -r $7 > $1.blast.flank.bed
@@ -338,7 +342,7 @@ if [ $cons_len -lt $FLANK ]; then
     FACTOR=10
 fi
 FLANK=$(( $FLANK/$FACTOR ))
-get_blast_hit $prefix $FASTAFILE $GENOME $EVALUE $MIN_LENGTH $FLANK $FLANK
+get_blast_hit $prefix $FASTAFILE $GENOME $EVALUE $MIN_LENGTH $FLANK $FLANK $cons_len
 fl=$(Rscript $scriptdir/utils/query_coverage.R $prefix.blast.o $cons_len $OUTPUTDIR/coverage.txt)
 
 
@@ -348,7 +352,7 @@ fl=$(Rscript $scriptdir/utils/query_coverage.R $prefix.blast.o $cons_len $OUTPUT
 
 if [ $(grep -c ">" $prefix.blast.bed.fa) -lt 3 ]; then
     echo -e "\n\tNot enough blast hit to extend/trim the consensus"
-    rm $OUTPUTDIR/seq.fasta.blast.* &> /dev/null
+    rm $prefix.blast.* &> /dev/null
     exit 0
 fi
 
@@ -374,7 +378,7 @@ function resize_cluster() {
         ## Check if sequence is a potential simple repeats
         if [ -f $OUTPUTDIR/log ] && [[ $(head -1 $OUTPUTDIR/log) == *"Ignoring duplicate sequence"* ]]; then
             echo -e "\n\tThe sequence is hypothetically a simple repeat"
-            rm $OUTPUTDIR/seq.fasta.blast.* $OUTPUTDIR/log $OUTPUTDIR/new_consensus.fasta &> /dev/null
+            rm $prefix.blast.* $OUTPUTDIR/log $OUTPUTDIR/new_consensus.fasta &> /dev/null
             cp $FASTAFILE $OUTPUTDIR/simple_repeat.fasta
             exit 0
         fi
@@ -464,6 +468,14 @@ with open("$1", "r") as f:
 END
 }
 
+function handle_error() {
+    echo -e "\n\nA new consensus is not generated"
+    rm $prefix.blast.bed $prefix.blast.flank.bed 2> /dev/null
+    rm $prefix.blast.bed.fa.fai.sortedbylength $prefix.blast.bed.fa.headers $prefix.blast.bed.fa.temp $prefix.blast.bed.fa.fai 2> /dev/null
+    rm $OUTPUTDIR/cialign*  $OUTPUTDIR/coverage.txt &> /dev/null
+    rm $OUTPUTDIR/coverage.txt $prefix.* $prefix.blast* $prefix.new* &> /dev/null
+    exit 1
+}
 
 
 #####################################################
@@ -553,23 +565,23 @@ while true; do
 
         if [ $excess_5 -eq 0 ]; then
             if $big_flank; then
-                left_flank=1500
+                left_flank=$(( 1500/$FACTOR ))
             else
-                left_flank=750
+                left_flank=$(( 750/$FACTOR ))
             fi
         fi
         if [ $excess_3 -eq 0 ]; then
             if $big_flank; then
-                right_flank=1500
+                right_flank=$(( 1500/$FACTOR ))
             else
-                right_flank=750
+                right_flank=$(( 750/$FACTOR ))
             fi
         fi
 
-        get_blast_hit $prefix $OUTPUTDIR/new_consensus.fasta $GENOME $EVALUE $MIN_LENGTH $left_flank $right_flank
-        resize_cluster $prefix.blast.bed.fa $LIMIT $KEEP
-        run_mafft $THREADS $prefix.blast.bed.fa
-        run_cialign $prefix.blast.bed.fa.maf $OUTPUTDIR/cialign $INS_MAX_SIZE 
+        get_blast_hit $prefix $OUTPUTDIR/new_consensus.fasta $GENOME $EVALUE $MIN_LENGTH $left_flank $right_flank $cons_len 2> /dev/null || handle_error
+        resize_cluster $prefix.blast.bed.fa $LIMIT $KEEP 2> /dev/null || handle_error
+        run_mafft $THREADS $prefix.blast.bed.fa 2> /dev/null || handle_error
+        run_cialign $prefix.blast.bed.fa.maf $OUTPUTDIR/cialign $INS_MAX_SIZE 2> /dev/null || handle_error
 
         echo -e "\n\tThe sequence is extended of $left_flank bp in 5' and of $right_flank in 3'"
 
@@ -581,4 +593,4 @@ while true; do
     counter=$(($counter+1))
 done
 
-rm $OUTPUTDIR/coverage.txt $OUTPUTDIR/seq.fasta.* $prefix.blast* $prefix.new* &> /dev/null
+rm $OUTPUTDIR/coverage.txt $prefix.* $prefix.blast* $prefix.new* &> /dev/null
