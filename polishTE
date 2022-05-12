@@ -239,6 +239,8 @@ OUTPUTDIR=$(realpath $OUTPUTDIR 2> /dev/null) || {
 
 #####################################################
 
+quit=false
+
 ## dependencies check
 dependencies=(mafft blastn samtools awk bedtools CIAlign python3 R)
 for dep in ${dependencies[@]}; do
@@ -261,6 +263,7 @@ for py_dep in ${python_dependencies[@]}; do
 done
 
 if $quit; then
+    echo quit
     exit 1
 fi
 
