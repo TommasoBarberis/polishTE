@@ -4,7 +4,6 @@
 # Date: 27/04/2022
 # Description: extension of consensi of transposable elements
 # TODOs:
-#   - link to the github repo in full documentation
 #   - option to plot alignement from CIAlign
 #   - test for installed dependancies
 #   - add user parameter min coverage
@@ -27,11 +26,15 @@
 # https://github.com/annaprotasio/TE_ManAnnot
 # https://github.com/clemgoub/TE-Aid
 
+# for more information:
+# https://github.com/TommasoBarberis/polishTE
+
 function usage()
 {
    cat << DOC
 
     developer: tommasobarberis98@gmail.com
+    for more information: https://github.com/TommasoBarberis/polishTE
 
    #######################################
 
