@@ -440,7 +440,7 @@ function levenshtein_distance {
 python3 - << END
 import Levenshtein as lv
 
-dist = 1 - lv.ratio(str("$seq1"), str("$seq2"))
+dist = 1 - lv.ratio(str("$seq1").upper(), str("$seq2").upper())
 print(dist)
 END
 }
