@@ -533,7 +533,7 @@ while true; do
         break
     else
         mv $OUTPUTDIR/new_consensus.fasta $OUTPUTDIR/old_consensus.fasta
-        rm $OUTPUTDIR/seq* $OUTPUTDIR/cialign* &> /dev/null
+        rm $OUTPUTDIR/cialign* &> /dev/null
     fi
 
     ## trimming
@@ -588,7 +588,7 @@ while true; do
 
         mv $OUTPUTDIR/new_consensus.fasta $OUTPUTDIR/old_consensus.fasta
         mv $OUTPUTDIR/cialign_consensus.fasta $OUTPUTDIR/new_consensus.fasta        
-        rm $OUTPUTDIR/seq* $OUTPUTDIR/cialign*  $OUTPUTDIR/coverage.txt &> /dev/null
+        rm $OUTPUTDIR/cialign*  $OUTPUTDIR/coverage.txt &> /dev/null
     fi
 
     counter=$(($counter+1))
