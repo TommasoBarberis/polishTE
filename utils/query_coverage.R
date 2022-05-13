@@ -9,8 +9,9 @@ cons_len        =   as.numeric(Args[7])
 out_file        =   as.character(Args[8])
 
 cons_coverage=function(blast_file=NULL, cons_len=NULL, out_file=NULL){
-    blast = read.table(blast_file, sep="\t")
-    new_rownames <- c(paste(blast$V2,"-",as.character(blast$V8),":",as.character(blast$V9), sep = ""))
+    blast = read.table(blast_file, sep="\t", comment.char = "", skip=1)
+
+    new_rownames <- c(paste(blast$V2,"-",as.character(blast$V8),":",as.character(blast$V9), sep = ""))  
 
     #make the coverage matrix
     coverage = matrix(rep(0, length(blast$V1)*as.numeric(cons_len)), byrow = T, ncol = as.numeric(cons_len))
@@ -26,6 +27,7 @@ cons_coverage=function(blast_file=NULL, cons_len=NULL, out_file=NULL){
 
     # number of full copies
     full=blast[abs(blast$V6-blast$V7) >= 0.9*as.numeric(cons_len),]
+    
     cat(nrow(full))    
 }
 

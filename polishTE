@@ -314,7 +314,8 @@ function get_blast_hit() {
 
     # run blastn
     echo "#qseqid sseqid pident length mismatch qstart qend sstart send sstrand" > $1.blast.o
-    blastn -query $2 -db $3 -outfmt "6 qseqid sseqid pident length mismatch qstart qend sstart send sstrand" -evalue $4 | awk -v "ml=$5" '{OFS="\t"; if ($4 > ml) {print $0}}' >> $1.blast.o
+    blastn -query $2 -db $3 -outfmt "6 qseqid sseqid pident length mismatch qstart qend sstart send sstrand" \
+        -evalue $4 | awk -v "ml=$5" '{OFS="\t"; if ($4 > ml) {print $0}}' >> $1.blast.o
     
     # filter blastn results
     awk -v cons_len="$8" '{OFS="\t"; if ($1~/^#/) {} else {if ($3 > 80 && $7-$6<3*cons_len) {print}}}' < $1.blast.o > $1.blast.tmp.o
