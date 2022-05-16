@@ -58,7 +58,7 @@ function usage()
                                     will use the half of the length of the TE as minimum length, else
                                     it will use the provided value
     -f, --flank                     Number of bases to extract at the flanking regions of the hits 
-                                    (default: 100)       
+                                    (default: 1000)       
     -e, --evalue                    e-value for blastn (default: 1e-20)
     -l, --limit                     Maximum number of hits to take in account for the alignement 
                                     (default: 100). If the number of hits is less then this limit, the

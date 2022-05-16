@@ -38,3 +38,38 @@ chmod +x polishTE
 
 ### Singularity
 
+```
+singularity pull library://tommasobarberis98/tealb/polishte
+```
+
+### Usage
+
+#### Basic usage
+
+```
+polishTE -i seq.fasta -g ref.fasta [OPTIONS]
+```
+
+#### With singularity
+
+```
+singularity exec polishTE.sif polishTE -i seq.fasta -g ref.fasta
+```
+
+### Options
+
+| Parameter | Description | Default |
+| --------- | ----------- | ------- |
+| `**-i, --input**` | FASTA file with the sequence to polish | None |
+| `**-g, --genome**` | FASTA file with the reference | None |
+|` -h, --help` | show the help message | None |
+| `-t, --threads` | number of threads to use in the multiple alignement with `MAFFT` | 1 |
+| `-o, --output` | output directory | ./ |
+| `-min, --min_length` | Minmum length for `blastn` hits that will be recovered in the genome. If the option is set to 0, the program will use the half of the length of the TE as minimum length, else it will use the provided value | 0 |
+| `-f, --flank`| Number of bases to extract at the flanking regions (5' and 3') of the hits | 1000pb |
+| `-e, --evalue` | e-value threshold for the `blastn`| 1e-20 |
+| `-l, --limit` | Maximum number of hits to take in account for the alignment. If the number of hits is less then this limit, the subsample is skipped. | 100 |
+| `-k, --keep_longest` | Keep the \<k> % longest sequences among the `blastn` hits | 0.25 |
+| `-ins, --max_ins_size` | Remove an insertion from the MSA if its size is less than \<ins> (range:[200-1000]) | 200 |
+| `-m, --mode` | Speed mode. fast and less accurate (max 10 iterations) or slow and more accurate (max 100 iterations). When the maximum number of iteration is reached, the program is interrupted and it returns any sequence | fast |
+| `-c, --min_cov` | Minimum coverage on boundaries to perform the extension | 3 |
