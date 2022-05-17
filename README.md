@@ -23,7 +23,7 @@ After that, the extended/trimmed sequence is used in a new cycle `blastn`-`mafft
 - `bedtools` (tested version: v2.27.1)
 - `CIAlign` (tested version: 1.0.15)
 - `python3` (tested version: 3.10.2)
-    - `Levenshtein` (tested version: 0.12.2)
+    - `python-Levenshtein` (tested version: 0.12.2)
 - `R` (tested version: 3.6.3)
 
 
@@ -73,3 +73,17 @@ singularity exec polishTE.sif polishTE -i seq.fasta -g ref.fasta
 | `-ins, --max_ins_size` | Remove an insertion from the MSA if its size is less than \<ins> (range:[200-1000]) | 200 |
 | `-m, --mode` | Speed mode. fast and less accurate (max 10 iterations) or slow and more accurate (max 100 iterations). When the maximum number of iteration is reached, the program is interrupted and it returns any sequence | fast |
 | `-c, --min_cov` | Minimum coverage on boundaries to perform the extension | 3 |
+
+
+
+## References
+
+- Goubert, C., Craig, R. J., Bilat, A. F., Peona, V., Vogan, A. A., & Protasio, A. V. (2022). A beginner’s guide to manual curation of transposable elements. Mobile DNA, 13(1), 7. doi:10.1186/s13100-021-00259-7
+- Katoh, K., Misawa, K., Kuma, K., & Miyata, T. (2002). MAFFT: a novel method for rapid multiple sequence alignment based on fast Fourier transform. Nucleic Acids Research, 30(14), 3059–3066. doi:10.1093/nar/gkf436
+- Camacho, C., Coulouris, G., Avagyan, V., Ma, N., Papadopoulos, J., Bealer, K., & Madden, T. L. (2009). BLAST+: architecture and applications. BMC Bioinformatics, 10(1), 421. doi:10.1186/1471-2105-10-421
+- Danecek, P., Bonfield, J. K., Liddle, J., Marshall, J., Ohan, V., Pollard, M. O., … Li, H. (2021). Twelve years of SAMtools and BCFtools. GigaScience, 10(2), giab008. doi:10.1093/gigascience/giab008
+- Quinlan, A. R., & Hall, I. M. (2010). BEDTools: a flexible suite of utilities for comparing genomic features. Bioinformatics, 26(6), 841–842. doi:10.1093/bioinformatics/btq033
+- Tumescheit, C., Firth, A. E., & Brown, K. (2022). CIAlign: A highly customisable command line tool to clean, interpret and visualise multiple sequence alignments. PeerJ, 10, e12983. doi:10.7717/peerj.12983
+- Van Rossum, G., & Drake, F. L. (2009). Python 3 Reference Manual. Scotts Valley, CA: CreateSpace
+- Haapala, A. (χ.χ.). python-Levenshtein: Python extension for computing string edit distances and similarities. Ανακτήθηκε από http://github.com/ztane/python-Levenshtein
+- R Core Team. (2016). R: A Language and Environment for Statistical Computing. Vienna, Austria. Retrieved from https://www.R-project.org/
