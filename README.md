@@ -60,8 +60,8 @@ singularity exec polishTE.sif polishTE -i seq.fasta -g ref.fasta
 
 | Parameter | Description | Default |
 | --------- | ----------- | ------- |
-| `**-i, --input**` | FASTA file with the sequence to polish | None |
-| `**-g, --genome**` | FASTA file with the reference | None |
+| **`-i, --input`** | FASTA file with the sequence to polish | None |
+| **`-g, --genome`** | FASTA file with the reference | None |
 |` -h, --help` | show the help message | None |
 | `-t, --threads` | number of threads to use in the multiple alignement with `MAFFT` | 1 |
 | `-o, --output` | output directory | ./ |
