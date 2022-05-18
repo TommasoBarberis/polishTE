@@ -137,6 +137,11 @@ while [[ $# -gt 0 ]]; do
 			;;
         -o|--output)
 			OUTPUTDIR=$2
+            OUTPUTDIR=$(realpath $OUTPUTDIR 2> /dev/null) || {
+                usage;
+                echo "  ERROR! Invalid output directory.";
+                exit 1;
+            }
             shift 2
 			;;
         -min|--min_length)
@@ -172,7 +177,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -k|--keep_longest)
             KEEP=$2
-            if (( $(echo "$KEEP > 1" |bc -l) )) || (( $(echo "$KEEP < 0" |bc -l) )); then
+            if (( $(echo "$KEEP > 1" | bc -l) )) || (( $(echo "$KEEP < 0" | bc -l) )); then
                 usage
                 echo "  ERROR! Invalid value for the pourcentage of longest hits to keep." 
                 exit 1
@@ -181,7 +186,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         -ins|--max_ins_size)
             INS_MAX_SIZE=$2
-            if (( $(echo "$INS_MAX_SIZE > 1000" |bc -l) )) || (( $(echo "$INS_MAX_SIZE < 200" |bc -l) )); then
+            if (( $(echo "$INS_MAX_SIZE > 1000" | bc -l) )) || (( $(echo "$INS_MAX_SIZE < 200" | bc -l) )); then
                 usage
                 echo "  ERROR! Invalid value for the maximum insertion size." 
                 exit 1
@@ -231,11 +236,6 @@ GENOME=$(realpath $GENOME 2> /dev/null) || {
     echo "  ERROR! No genome found.";
     exit 1; 
 }
-OUTPUTDIR=$(realpath $OUTPUTDIR 2> /dev/null) || {
-    usage;
-    echo "  ERROR! Invalid output directory.";
-    exit 1;
-}
 
 
 #####################################################
@@ -273,7 +273,10 @@ fi
 
 # global variables
 scriptdir=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-prefix=$OUTPUTDIR/`basename $FASTAFILE`
+base=`basename $FASTAFILE`
+nb_delim=$(grep -o '\.' <<< $base | grep -c .)
+prefix=`basename $FASTAFILE | cut -f -$nb_delim -d"."`
+
 
 #####################################################
 
@@ -295,12 +298,6 @@ if [ ! -f "$length_file" ]; then
     samtools faidx $GENOME
     awk '{OFS="\t"; print $1,$2}' < $GENOME.fai > $GENOME.length
 	echo -e "\n\n"
-fi
-
-
-# if the value 0 is entered as min_length by the user, redifine min_length as half the length of fasta sequence
-if [ $MIN_LENGTH == 0 ]; then 
-	MIN_LENGTH=`grep -v ">" $FASTAFILE | wc | awk '{print $3/2}'`
 fi
 
 
@@ -338,24 +335,7 @@ function get_blast_hit() {
     rm $1.blast.bed $1.blast.flank.bed
 
 }
-cons_len=$(awk 'BEGIN {OFS = "\n"}; /^>/ {print(substr(sequence_id, 2)" "sequence_length); sequence_length = 0; sequence_id = $0}; /^[^>]/ {sequence_length += length($0)}; END {print(substr(sequence_id, 2)" "sequence_length)}' $FASTAFILE | awk 'NR > 1 {print $NF}')
-if [ $cons_len -lt $FLANK ]; then
-    FACTOR=10
-fi
-FLANK=$(( $FLANK/$FACTOR ))
-get_blast_hit $prefix $FASTAFILE $GENOME $EVALUE $MIN_LENGTH $FLANK $FLANK $cons_len
-fl=$(Rscript $scriptdir/utils/query_coverage.R $prefix.blast.o $cons_len $OUTPUTDIR/coverage.txt)
 
-
-#####################################################
-
-## Check for a minimal number of sequences
-
-if [ $(grep -c ">" $prefix.blast.bed.fa) -lt 3 ]; then
-    echo -e "\n\tNot enough blast hit to extend/trim the consensus"
-    rm $prefix.blast.* &> /dev/null
-    exit 0
-fi
 
 #####################################################
 
@@ -398,7 +378,6 @@ function resize_cluster() {
     fi
 }
 
-resize_cluster $prefix.blast.bed.fa $LIMIT $KEEP
 
 #####################################################
 
@@ -408,8 +387,6 @@ function run_mafft() {
     echo -e "\tMultiple alignement of sequences using MAFFT"
     mafft --reorder --thread $1 $2 > $2.maf
 }
-
-run_mafft $THREADS $prefix.blast.bed.fa
 
 
 #####################################################
@@ -423,8 +400,6 @@ function run_cialign() {
 
     rm $2_log.txt $2_with_consensus.fasta $2_cleaned.fasta $2_removed.txt
 }
-
-run_cialign $prefix.blast.bed.fa.maf $OUTPUTDIR/cialign $INS_MAX_SIZE 
 
 
 #####################################################
@@ -481,117 +456,169 @@ function handle_error() {
 
 #####################################################
 
+## Main function
+
+function main() {
+    cp $FASTAFILE $OUTPUTDIR/old_consensus.fasta
+    mv $OUTPUTDIR/cialign_consensus.fasta $OUTPUTDIR/new_consensus.fasta
+
+    counter=1
+
+    while true; do
+        
+        ## compute distance between two consensi
+        dist=$(levenshtein_distance $OUTPUTDIR/old_consensus.fasta $OUTPUTDIR/new_consensus.fasta >&1)
+
+        ## new consensus coverage
+        blastn -query $OUTPUTDIR/new_consensus.fasta -db $GENOME -outfmt "6 qseqid sseqid pident length mismatch qstart qend sstart send sstrand" -evalue $EVALUE | awk -v "ml=$MIN_LENGTH" '{OFS="\t"; if ($4 > ml) {print $0}}' >> $prefix.new.blast.o
+        new_cons_len=$(awk 'BEGIN {OFS = "\n"}; /^>/ {print(substr(sequence_id, 2)" "sequence_length); sequence_length = 0; sequence_id = $0}; /^[^>]/ {sequence_length += length($0)}; END {print(substr(sequence_id, 2)" "sequence_length)}' $OUTPUTDIR/new_consensus.fasta | awk 'NR > 1 {print $NF}')
+        rm $OUTPUTDIR/coverage.txt &> /dev/null
+        new_fl=$(Rscript $scriptdir/utils/query_coverage.R $prefix.new.blast.o $new_cons_len $OUTPUTDIR/coverage.txt)
+        
+        if [ $new_fl -ge $fl ]; then
+            fl=$new_fl
+            big_flank=true
+        else
+            big_flank=false
+        fi
+
+        ## count number of 0 at the begin et at the end
+        excess_5=0
+        excess_3=0
+
+        excess_5=$(end_excess $OUTPUTDIR/coverage.txt True $MIN_COVERAGE >&1)
+        excess_3=$(end_excess $OUTPUTDIR/coverage.txt False $MIN_COVERAGE >&1)
+
+        if [ $MODE = "fast" ]; then
+            if [ $counter -gt 10 ]; then
+                echo -e '\tThe maximum number of iterations (10) for the "fast" mode is reached, a new consensus is not generated'
+                rm $OUTPUTDIR/old_consensus.fasta $OUTPUTDIR/new_consensus.fasta &> /dev/null
+                break
+            fi
+        elif [ $MODE = "slow" ]; then
+            if [ $counter -gt 100 ]; then
+                echo -e '\tThe maximum number of iterations (100) for the "slow" mode is reached, a new consensus is not generated'
+                rm $OUTPUTDIR/old_consensus.fasta $OUTPUTDIR/new_consensus.fasta &> /dev/null
+                break
+            fi
+        fi
+
+        if (( $(echo "$dist < 0.3" | bc -l) )) && [ $excess_5 -lt 10 ] && [ $excess_3 -lt 10 ]; then
+            # consensi are pretty similar
+            rm $OUTPUTDIR/old_consensus.fasta &> /dev/null
+            break
+        else
+            mv $OUTPUTDIR/new_consensus.fasta $OUTPUTDIR/old_consensus.fasta
+            rm $OUTPUTDIR/cialign* &> /dev/null
+        fi
+
+        ## trimming
+        if [ $excess_5 -ne 0 ] || [ $excess_3 -ne 0 ]; then
+            head -1 $OUTPUTDIR/old_consensus.fasta > $OUTPUTDIR/new_consensus.fasta
+            seq=$(tail -1 $OUTPUTDIR/old_consensus.fasta)
+
+            if [ $excess_5 -ne 0 ] && [ ${#seq} -gt $excess_5 ]; then
+                seq=${seq:excess_5}
+            else
+                excess_5=0
+            fi
+            if [ $excess_3 -ne 0 ] && [ ${#seq} -gt $excess_3 ]; then
+                seq=${seq::-excess_3}
+            else
+                excess_3=0
+            fi
+
+            echo $seq >> $OUTPUTDIR/new_consensus.fasta
+            echo -e "\n\tThe sequence is trimmed of $excess_5 bp in 5' and of $excess_3 in 3'"
+        else
+            cp $OUTPUTDIR/old_consensus.fasta $OUTPUTDIR/new_consensus.fasta
+        fi
+
+        ## extension
+        if [ $excess_5 -eq 0 ] || [ $excess_3 -eq 0 ]; then
+
+            left_flank=0
+            right_flank=0
+
+            if [ $excess_5 -eq 0 ]; then
+                if $big_flank; then
+                    left_flank=$(( 1500/$FACTOR ))
+                else
+                    left_flank=$(( 750/$FACTOR ))
+                fi
+            fi
+            if [ $excess_3 -eq 0 ]; then
+                if $big_flank; then
+                    right_flank=$(( 1500/$FACTOR ))
+                else
+                    right_flank=$(( 750/$FACTOR ))
+                fi
+            fi
+
+            get_blast_hit $prefix $OUTPUTDIR/new_consensus.fasta $GENOME $EVALUE $MIN_LENGTH $left_flank $right_flank $cons_len 2> /dev/null || handle_error
+            resize_cluster $prefix.blast.bed.fa $LIMIT $KEEP 2> /dev/null || handle_error
+            run_mafft $THREADS $prefix.blast.bed.fa 2> /dev/null || handle_error
+            run_cialign $prefix.blast.bed.fa.maf $OUTPUTDIR/cialign $INS_MAX_SIZE 2> /dev/null || handle_error
+
+            echo -e "\n\tThe sequence is extended of $left_flank bp in 5' and of $right_flank in 3'"
+
+            mv $OUTPUTDIR/new_consensus.fasta $OUTPUTDIR/old_consensus.fasta
+            mv $OUTPUTDIR/cialign_consensus.fasta $OUTPUTDIR/new_consensus.fasta        
+            rm $OUTPUTDIR/cialign*  $OUTPUTDIR/coverage.txt &> /dev/null
+        fi
+
+        counter=$(($counter+1))
+    done
+
+    rm $OUTPUTDIR/coverage.txt $prefix.* $prefix.blast* $prefix.new* &> /dev/null
+}
+
+#####################################################
+
 ## Main loop
 
-cp $FASTAFILE $OUTPUTDIR/old_consensus.fasta
-mv $OUTPUTDIR/cialign_consensus.fasta $OUTPUTDIR/new_consensus.fasta
+# check if the FASTA file is multi-line or single-line
+nb_seq=$(grep -c '>' $FASTAFILE)
+nb_lines=$(wc -l $FASTAFILE | cut -f1 -d" ")
 
-counter=1
+if [ $nb_lines -gt $(echo "2*$nb_seq" | bc -l) ]; then
+    # transform from multi-line to single-line
+    awk '/^>/ {printf("\n%s\n",$0);next; } { printf("%s",$0);}  END {printf("\n");}' < $FASTAFILE | tail -n +2 > $prefix.sl.fa
+    FASTAFILE=$prefix.sl.fa
+fi
 
-while true; do
-     
-    ## compute distance between two consensi
-    dist=$(levenshtein_distance $OUTPUTDIR/old_consensus.fasta $OUTPUTDIR/new_consensus.fasta >&1)
 
-    ## new consensus coverage
-    blastn -query $OUTPUTDIR/new_consensus.fasta -db $GENOME -outfmt "6 qseqid sseqid pident length mismatch qstart qend sstart send sstrand" -evalue $EVALUE | awk -v "ml=$MIN_LENGTH" '{OFS="\t"; if ($4 > ml) {print $0}}' >> $prefix.new.blast.o
-    new_cons_len=$(awk 'BEGIN {OFS = "\n"}; /^>/ {print(substr(sequence_id, 2)" "sequence_length); sequence_length = 0; sequence_id = $0}; /^[^>]/ {sequence_length += length($0)}; END {print(substr(sequence_id, 2)" "sequence_length)}' $OUTPUTDIR/new_consensus.fasta | awk 'NR > 1 {print $NF}')
-    rm $OUTPUTDIR/coverage.txt &> /dev/null
-    new_fl=$(Rscript $scriptdir/utils/query_coverage.R $prefix.new.blast.o $new_cons_len $OUTPUTDIR/coverage.txt)
-    
-    if [ $new_fl -ge $fl ]; then
-        fl=$new_fl
-        big_flank=true
-    else
-        big_flank=false
-    fi
+exit 1
 
-    ## count number of 0 at the begin et at the end
-    excess_5=0
-    excess_3=0
+# if the value 0 is entered as min_length by the user, redifine min_length as half the length of fasta sequence
+if [ $MIN_LENGTH == 0 ]; then 
+	MIN_LENGTH=`grep -v ">" $FASTAFILE | wc | awk '{print $3/2}'`
+fi
 
-    excess_5=$(end_excess $OUTPUTDIR/coverage.txt True $MIN_COVERAGE >&1)
-    excess_3=$(end_excess $OUTPUTDIR/coverage.txt False $MIN_COVERAGE >&1)
 
-    if [ $MODE = "fast" ]; then
-        if [ $counter -gt 10 ]; then
-            echo -e '\tThe maximum number of iterations (10) for the "fast" mode is reached, a new consensus is not generated'
-            rm $OUTPUTDIR/old_consensus.fasta $OUTPUTDIR/new_consensus.fasta &> /dev/null
-            break
-        fi
-    elif [ $MODE = "slow" ]; then
-        if [ $counter -gt 100 ]; then
-            echo -e '\tThe maximum number of iterations (100) for the "slow" mode is reached, a new consensus is not generated'
-            rm $OUTPUTDIR/old_consensus.fasta $OUTPUTDIR/new_consensus.fasta &> /dev/null
-            break
-        fi
-    fi
+# initialisation
+cons_len=$(awk 'BEGIN {OFS = "\n"}; /^>/ {print(substr(sequence_id, 2)" "sequence_length); sequence_length = 0; sequence_id = $0}; /^[^>]/ {sequence_length += length($0)}; END {print(substr(sequence_id, 2)" "sequence_length)}' $FASTAFILE | awk 'NR > 1 {print $NF}')
+if [ $cons_len -lt $FLANK ]; then
+    FACTOR=10
+fi
+FLANK=$(( $FLANK/$FACTOR ))
+get_blast_hit $prefix $FASTAFILE $GENOME $EVALUE $MIN_LENGTH $FLANK $FLANK $cons_len
+fl=$(Rscript $scriptdir/utils/query_coverage.R $prefix.blast.o $cons_len $OUTPUTDIR/coverage.txt)
 
-    if (( $(echo "$dist < 0.3" |bc -l) )) && [ $excess_5 -lt 10 ] && [ $excess_3 -lt 10 ]; then
-        # consensi are pretty similar
-        rm $OUTPUTDIR/old_consensus.fasta &> /dev/null
-        break
-    else
-        mv $OUTPUTDIR/new_consensus.fasta $OUTPUTDIR/old_consensus.fasta
-        rm $OUTPUTDIR/cialign* &> /dev/null
-    fi
 
-    ## trimming
-    if [ $excess_5 -ne 0 ] || [ $excess_3 -ne 0 ]; then
-        head -1 $OUTPUTDIR/old_consensus.fasta > $OUTPUTDIR/new_consensus.fasta
-        seq=$(tail -1 $OUTPUTDIR/old_consensus.fasta)
+#####################################################
 
-        if [ $excess_5 -ne 0 ] && [ ${#seq} -gt $excess_5 ]; then
-            seq=${seq:excess_5}
-        else
-            excess_5=0
-        fi
-        if [ $excess_3 -ne 0 ] && [ ${#seq} -gt $excess_3 ]; then
-            seq=${seq::-excess_3}
-        else
-            excess_3=0
-        fi
+## Check for a minimal number of sequences
 
-        echo $seq >> $OUTPUTDIR/new_consensus.fasta
-        echo -e "\n\tThe sequence is trimmed of $excess_5 bp in 5' and of $excess_3 in 3'"
-    else
-        cp $OUTPUTDIR/old_consensus.fasta $OUTPUTDIR/new_consensus.fasta
-    fi
+if [ $(grep -c ">" $prefix.blast.bed.fa) -lt 3 ]; then
+    echo -e "\n\tNot enough blast hit to extend/trim the consensus"
+    rm $prefix.blast.* &> /dev/null
+    exit 0
+fi
 
-    ## extension
-    if [ $excess_5 -eq 0 ] || [ $excess_3 -eq 0 ]; then
 
-        left_flank=0
-        right_flank=0
+resize_cluster $prefix.blast.bed.fa $LIMIT $KEEP
 
-        if [ $excess_5 -eq 0 ]; then
-            if $big_flank; then
-                left_flank=$(( 1500/$FACTOR ))
-            else
-                left_flank=$(( 750/$FACTOR ))
-            fi
-        fi
-        if [ $excess_3 -eq 0 ]; then
-            if $big_flank; then
-                right_flank=$(( 1500/$FACTOR ))
-            else
-                right_flank=$(( 750/$FACTOR ))
-            fi
-        fi
+run_mafft $THREADS $prefix.blast.bed.fa
 
-        get_blast_hit $prefix $OUTPUTDIR/new_consensus.fasta $GENOME $EVALUE $MIN_LENGTH $left_flank $right_flank $cons_len 2> /dev/null || handle_error
-        resize_cluster $prefix.blast.bed.fa $LIMIT $KEEP 2> /dev/null || handle_error
-        run_mafft $THREADS $prefix.blast.bed.fa 2> /dev/null || handle_error
-        run_cialign $prefix.blast.bed.fa.maf $OUTPUTDIR/cialign $INS_MAX_SIZE 2> /dev/null || handle_error
-
-        echo -e "\n\tThe sequence is extended of $left_flank bp in 5' and of $right_flank in 3'"
-
-        mv $OUTPUTDIR/new_consensus.fasta $OUTPUTDIR/old_consensus.fasta
-        mv $OUTPUTDIR/cialign_consensus.fasta $OUTPUTDIR/new_consensus.fasta        
-        rm $OUTPUTDIR/cialign*  $OUTPUTDIR/coverage.txt &> /dev/null
-    fi
-
-    counter=$(($counter+1))
-done
-
-rm $OUTPUTDIR/coverage.txt $prefix.* $prefix.blast* $prefix.new* &> /dev/null
+run_cialign $prefix.blast.bed.fa.maf $OUTPUTDIR/cialign $INS_MAX_SIZE 
