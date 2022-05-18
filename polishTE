@@ -4,7 +4,7 @@
 # Date: 27/04/2022
 # Description: extension of consensi of transposable elements
 # TODOs:
-#   - singularity container
+#   - explain the balance on the flanking region ($FACTOR)
 
 # dependancies:
 # - mafft
@@ -333,7 +333,6 @@ function get_blast_hit() {
 
     # remove redundant files
     rm $1.blast.bed $1.blast.flank.bed
-
 }
 
 
@@ -584,11 +583,11 @@ nb_lines=$(wc -l $FASTAFILE | cut -f1 -d" ")
 if [ $nb_lines -gt $(echo "2*$nb_seq" | bc -l) ]; then
     # transform from multi-line to single-line
     awk '/^>/ {printf("\n%s\n",$0);next; } { printf("%s",$0);}  END {printf("\n");}' < $FASTAFILE | tail -n +2 > $prefix.sl.fa
-    FASTAFILE=$prefix.sl.fa
+    FASTAFILE=`realpath $OUTPUTDIR`/$prefix.sl.fa
 fi
 
-
-exit 1
+tmp_dir=`realpath $OUTPUTDIR`/polishte_tmp
+mkdir $tmp_dir
 
 # if the value 0 is entered as min_length by the user, redifine min_length as half the length of fasta sequence
 if [ $MIN_LENGTH == 0 ]; then 
@@ -596,29 +595,47 @@ if [ $MIN_LENGTH == 0 ]; then
 fi
 
 
-# initialisation
-cons_len=$(awk 'BEGIN {OFS = "\n"}; /^>/ {print(substr(sequence_id, 2)" "sequence_length); sequence_length = 0; sequence_id = $0}; /^[^>]/ {sequence_length += length($0)}; END {print(substr(sequence_id, 2)" "sequence_length)}' $FASTAFILE | awk 'NR > 1 {print $NF}')
-if [ $cons_len -lt $FLANK ]; then
-    FACTOR=10
-fi
-FLANK=$(( $FLANK/$FACTOR ))
-get_blast_hit $prefix $FASTAFILE $GENOME $EVALUE $MIN_LENGTH $FLANK $FLANK $cons_len
-fl=$(Rscript $scriptdir/utils/query_coverage.R $prefix.blast.o $cons_len $OUTPUTDIR/coverage.txt)
+while read -r header; do
+    read -r sequence
+    
+    seq_name=`echo $header | cut -f2 -d">"`
+    
+    # create tmp file with only one sequence
+    echo -e "$header\n$sequence" > $tmp_dir/seq.fa
+
+    # initialisation
+    cons_len=$(awk 'BEGIN {OFS = "\n"}; /^>/ {print(substr(sequence_id, 2)" "sequence_length); sequence_length = 0; sequence_id = $0}; /^[^>]/ {sequence_length += length($0)}; END {print(substr(sequence_id, 2)" "sequence_length)}' $tmp_dir/seq.fa | awk 'NR > 1 {print $NF}')
+    if [ $cons_len -lt $FLANK ]; then
+        FACTOR=10
+    fi
+    
+    FLANK=$(( $FLANK/$FACTOR ))
+    get_blast_hit $tmp_dir/seq $tmp_dir/seq.fa $GENOME $EVALUE $MIN_LENGTH $FLANK $FLANK $cons_len
+    fl=$(Rscript $scriptdir/utils/query_coverage.R $tmp_dir/seq.blast.o $cons_len $tmp_dir/coverage.txt)
+
+    # Check for a minimal number of sequences
+    if [ $(grep -c ">" $tmp_dir/seq.blast.bed.fa) -lt 3 ]; then
+        echo -e "\n\t$seq_name has not enough blast hits to extend/trim the consensus"
+        rm $prefix.blast.* &> /dev/null
+        exit 0
+    fi
+
+done < $FASTAFILE
+
+exit 1
 
 
-#####################################################
 
-## Check for a minimal number of sequences
 
-if [ $(grep -c ">" $prefix.blast.bed.fa) -lt 3 ]; then
-    echo -e "\n\tNot enough blast hit to extend/trim the consensus"
-    rm $prefix.blast.* &> /dev/null
-    exit 0
-fi
+
 
 
 resize_cluster $prefix.blast.bed.fa $LIMIT $KEEP
-
 run_mafft $THREADS $prefix.blast.bed.fa
+run_cialign $OUTPUTDIR/polishte_tmp/$prefix.blast.bed.fa.maf $OUTPUTDIR/polishte_tmp/cialign $INS_MAX_SIZE 
 
-run_cialign $prefix.blast.bed.fa.maf $OUTPUTDIR/cialign $INS_MAX_SIZE 
+#####################################################
+
+## clean
+
+rm -r $OUTPUTDIR/polishte_tmp
